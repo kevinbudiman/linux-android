@@ -391,6 +391,17 @@ echo 'termux-wake-lock && nohup bash ~/start-homeassistant.sh > ~/hass.log 2>&1 
 **安装时出现"library not found"或"cannot link executable"错误**
 这是 libpcre 崩溃问题。完全关闭 Termux，重新打开，运行 `pkg upgrade -y`，然后重新运行脚本。
 
+**几分钟后桌面退出，显示 `[Process completed (signal 9) - press Enter]`**
+Android 12+ 的"幽灵进程查杀"（phantom process killer）会在所有应用的子进程总数超过 32 个，或 Termux 在后台时子进程占用大量 CPU 时，用 SIGKILL 杀掉它们。桌面再加上 Firefox 或 VLC 很容易超过这个上限。前面的 ConsoleKit、UPower、system bus、DPMS、bamf 警告都无害，不是原因。
+
+- **能打开开发者选项：** Android 14+ 打开"停用子进程限制"并重启。Android 12L/13 用无线调试（`pkg install android-tools`，再 `adb pair` / `adb connect` 到 `127.0.0.1`）执行：
+  ```bash
+  adb shell "/system/bin/device_config set_sync_disabled_for_tests persistent"
+  adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+  adb shell settings put global settings_enable_monitor_phantom_procs false
+  ```
+- **开发者选项被禁用**（工作资料/受管设备）：无法提高上限，只能避开。重新运行 `termux-linux-setup.sh` 生成新的启动脚本——`start-linux.sh` 现在会获取唤醒锁、不启动无障碍总线，并禁用在 Termux 上无法工作的自启动服务（电源管理、屏保、polkit 代理等），使桌面进程数远低于上限。同时把 Termux 和 Termux-X11 设为"电池 → 不受限制"，一次只运行一个重型应用（Firefox、VLC）。在 Termux 中运行 `ps -e | wc -l` 可查看离 32 还有多远。
+
 **出现"Unable to contact settings server"或"Failed to connect to socket .../dbus-XXXX: Connection refused"**
 桌面的设置守护进程通过 D-Bus 会话总线通信。要么总线没有启动，要么上一次会话被强制杀死后留下了失效的 socket，而桌面仍在尝试复用它。现在 `start-linux.sh` 会先清理残留状态，再在固定地址上启动总线，然后才启动桌面。如果你用的是旧版脚本，重新运行 `termux-linux-setup.sh` 以重新生成启动脚本，或手动修复：
 

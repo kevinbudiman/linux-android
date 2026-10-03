@@ -666,6 +666,24 @@ PLANKEOF
         rm -f ~/.config/autostart/plank.desktop 2>/dev/null || true
     fi
 
+    # ---- Lean session (phantom process killer) ----
+    # Android 12+ SIGKILLs an app's child processes once more than 32 are
+    # running across all apps, which ends the whole desktop with
+    # "[Process completed (signal 9)]". Without Developer options there is no
+    # way to raise that limit, so keep the desktop's process count down by
+    # skipping autostart services that cannot work on Termux anyway (no
+    # UPower, no logind, no system bus, no screen locking).
+    mkdir -p ~/.config/autostart
+    for svc in xfce4-power-manager xfce4-screensaver light-locker xscreensaver \
+               mate-power-manager mate-screensaver lxqt-powermanagement \
+               at-spi-dbus-bus xfce-polkit polkit-gnome-authentication-agent-1 \
+               polkit-mate-authentication-agent-1 lxqt-policykit-agent \
+               blueman nm-applet xiccd print-applet geoclue-demo-agent; do
+        [ -f "${TERMUX_PREFIX}/etc/xdg/autostart/${svc}.desktop" ] || continue
+        printf '[Desktop Entry]\nType=Application\nName=%s\nHidden=true\n' "$svc" \
+            > ~/.config/autostart/${svc}.desktop
+    done
+
     case $DE_CHOICE in
         1)
             EXEC_CMD="exec startxfce4"
@@ -692,6 +710,15 @@ echo "[*] Starting ${DE_NAME} on Termux-X11..."
 echo ""
 
 source ~/.config/linux-gpu.sh 2>/dev/null
+
+# Keep Android from dozing Termux while the desktop runs in Termux-X11.
+command -v termux-wake-lock >/dev/null 2>&1 && termux-wake-lock
+
+# Don't spawn the accessibility bus (at-spi-bus-launcher + its own
+# dbus-daemon + registryd): three fewer processes for Android's phantom
+# process killer to count.
+export NO_AT_BRIDGE=1
+export GTK_A11Y=none
 
 echo "[*] Cleaning up old sessions..."
 pkill -9 -f "termux.x11" 2>/dev/null || true
@@ -766,6 +793,7 @@ pkill -9 -f "dbus-daemon" 2>/dev/null || true
 # Leave no dead socket for the next start to trip over.
 rm -f "${TERMUX_PREFIX}/var/run/dbus/session_bus_socket" 2>/dev/null || true
 rm -rf "\$HOME/.dbus" 2>/dev/null || true
+command -v termux-wake-unlock >/dev/null 2>&1 && termux-wake-unlock
 echo "[✔] Desktop stopped."
 STOPEOF
     chmod +x ~/stop-linux.sh

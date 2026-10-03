@@ -430,6 +430,17 @@ Run `stop-linux.sh` then `start-linux.sh` again. KDE Plasma can take 20–30 sec
 **"library not found" or "cannot link executable" error during install**
 This is the libpcre crash. Close Termux completely, reopen it, run `pkg upgrade -y`, then re-run the script.
 
+**Desktop dies after a few minutes with `[Process completed (signal 9) - press Enter]`**
+Android 12+ has a "phantom process killer" that SIGKILLs an app's child processes once more than 32 are running (across all apps), or when they use a lot of CPU while Termux is in the background. A desktop plus Firefox or VLC easily crosses that line. The warnings above it (ConsoleKit, UPower, system bus, DPMS, bamf) are harmless noise, not the cause.
+
+- **If you can open Developer options:** on Android 14+, turn on *Disable child process restrictions* and reboot. On Android 12L/13, use wireless debugging (`pkg install android-tools`, then `adb pair` / `adb connect` to `127.0.0.1`) and run:
+  ```bash
+  adb shell "/system/bin/device_config set_sync_disabled_for_tests persistent"
+  adb shell "/system/bin/device_config put activity_manager max_phantom_processes 2147483647"
+  adb shell settings put global settings_enable_monitor_phantom_procs false
+  ```
+- **If Developer options are blocked** (work profile / managed phone): the limit can't be raised, only avoided. Re-run `termux-linux-setup.sh` to regenerate the launchers — `start-linux.sh` now takes a wake lock, skips the accessibility bus, and disables autostart services that can't work on Termux (power manager, screensaver, polkit agent, …), which keeps the desktop well under the limit. Also set Termux and Termux-X11 to *Battery → Unrestricted*, and run one heavy app (Firefox, VLC) at a time. `ps -e | wc -l` in Termux shows how close you are to 32.
+
 **"Unable to contact settings server" / "Failed to connect to socket .../dbus-XXXX: Connection refused"**
 The desktop's settings daemon talks over the D-Bus session bus. Either no bus is running, or a previous session was force-killed and left a dead socket behind that the desktop keeps trying to reuse. `start-linux.sh` now clears the stale state and starts a bus at a fixed address before launching the desktop. If you are on an older copy of the script, re-run `termux-linux-setup.sh` to regenerate the launchers, or fix it by hand:
 
